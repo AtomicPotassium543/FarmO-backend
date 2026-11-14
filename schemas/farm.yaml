@@ -1,0 +1,121 @@
+
+properties:
+  soil_type:
+    type: string
+    required: true
+    enum:
+      - Clay
+      - Clay loam
+      - Sandy
+      - Loamy
+      - Silt
+      - Peaty
+      - Chalky
+
+  soil_ph:
+    type: number
+    required: true
+    min: 0
+    max: 14
+
+  organic_carbon:
+    type: number
+    min: 0
+    max: 100
+
+  organic_matter:
+    type: number
+    min: 0
+    max: 100
+
+  nitrogen:
+    type: number
+    min: 0
+
+  phosphorus:
+    type: number
+    min: 0
+
+  potassium:
+    type: number
+    min: 0
+
+  soil_moisture:
+    type: number
+    min: 0
+    max: 1
+
+  soil_temperature:
+    type: number
+
+  sand_percentage:
+    type: number
+    min: 0
+    max: 100
+
+  clay_percentage:
+    type: number
+    min: 0
+    max: 100
+
+  silt_percentage:
+    type: number
+    min: 0
+    max: 100
+
+  elevation:
+    type: number
+
+  slope:
+    type: number
+    min: 0
+
+  area:
+    type: number
+    required: true
+    min: 0
+
+  area_unit:
+    type: string
+    default: hectares
+    enum:
+      - hectares
+      - acres
+      - square_meters
+
+  locality:
+    type: string
+
+  district:
+    type: string
+
+  land_type:
+    type: string
+
+  irrigation:
+    type: string
+
+  cultivation_start_year:
+    type: integer
+    min: 0
+    max: 9999
+
+  notes:
+    type: string
+    max_length: 2000
+
+  irrigation_available:
+    type: boolean
+    default: false
+
+  irrigation_method:
+    type: string
+    enum:
+      - Drip
+      - Sprinkler
+      - Flood
+      - Furrow
+      - None
+
+  water_source:
+    type: string

@@ -1,0 +1,156 @@
+
+properties:
+  species:
+    type: string
+    required: true
+
+  variety:
+    type: string
+
+  growth_stage:
+    type: string
+    required: true
+    enum:
+      - Seed
+      - Germination
+      - Seedling
+      - Vegetative
+      - Tillering
+      - Flowering
+      - Fruiting
+      - Mature
+
+  growth_stage_override:
+    type: string
+    default: Automatic
+    enum:
+      - Automatic
+      - Seed
+      - Germination
+      - Seedling
+      - Vegetative
+      - Tillering
+      - Flowering
+      - Fruiting
+      - Mature
+
+  planting_date:
+    type: string
+    required: true
+
+  area:
+    type: number
+    min: 0
+
+  area_unit:
+    type: string
+    default: hectares
+    enum:
+      - hectares
+      - acres
+      - square_meters
+
+  previous_crop:
+    type: string
+
+  spacing_cm:
+    type: number
+    min: 0
+
+  seed_rate_kg_per_acre:
+    type: number
+    min: 0
+
+  field_note:
+    type: string
+    max_length: 2000
+
+  expected_harvest_date:
+    type: string
+
+  actual_harvest_date:
+    type: string
+
+  quantity:
+    type: integer
+    required: true
+    min: 1
+
+  expected_yield:
+    type: number
+    min: 0
+
+  actual_yield:
+    type: number
+    min: 0
+
+  optimal_temperature_min:
+    type: number
+
+  optimal_temperature_max:
+    type: number
+
+  water_requirement:
+    type: number
+    min: 0
+
+  sunlight_requirement:
+    type: number
+    min: 0
+    max: 24
+
+  optimal_ph_min:
+    type: number
+    min: 0
+    max: 14
+
+  optimal_ph_max:
+    type: number
+    min: 0
+    max: 14
+
+  soil_ph:
+    type: number
+    min: 0
+    max: 14
+
+  soil_moisture_percent:
+    type: number
+    min: 0
+    max: 100
+
+  organic_matter:
+    type: number
+    min: 0
+    max: 100
+
+  available_nitrogen_kg_per_ha:
+    type: number
+    min: 0
+
+  available_phosphorus_kg_per_ha:
+    type: number
+    min: 0
+
+  exchangeable_potassium_kg_per_ha:
+    type: number
+    min: 0
+
+  irrigation_source:
+    type: string
+
+  fertilizer_required:
+    type: boolean
+    default: false
+
+  nitrogen_requirement:
+    type: number
+    min: 0
+
+  phosphorus_requirement:
+    type: number
+    min: 0
+
+  potassium_requirement:
+    type: number
+    min: 0
