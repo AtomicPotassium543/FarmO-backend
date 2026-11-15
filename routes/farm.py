@@ -25,12 +25,20 @@ class FarmUpdate(BaseModel):
 
 
 def format_farm(farm: dict) -> dict:
+    props = farm.get("properties", {})
     return {
         "id": str(farm["_id"]),
-        "project_id": farm["project_id"],
+        "project_id": str(farm.get("project_id", "")),
         "name": farm["name"],
-        "owner_id": farm["owner_id"],
-        "properties": farm.get("properties", {}),
+        "owner_id": str(farm.get("owner_id", "")),
+        "properties": props,
+        "latitude": props.get("latitude") if props.get("latitude") is not None else farm.get("latitude"),
+        "longitude": props.get("longitude") if props.get("longitude") is not None else farm.get("longitude"),
+        "farmer_priority": props.get("farmer_priority") or farm.get("farmer_priority"),
+        "water_availability": props.get("water_availability") or farm.get("water_availability"),
+        "equipment_limitation": props.get("equipment_limitation") or farm.get("equipment_limitation"),
+        "market_preference": props.get("market_preference") or farm.get("market_preference"),
+        "human_judgment_acknowledged": props.get("human_judgment_acknowledged", True),
         "created_at": farm["created_at"],
         "updated_at": farm["updated_at"]
     }

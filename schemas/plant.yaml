@@ -49,6 +49,9 @@ properties:
       - hectares
       - acres
       - square_meters
+      - acre
+      - hectare
+      - sqm
 
   previous_crop:
     type: string

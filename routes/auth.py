@@ -24,7 +24,7 @@ from email.message import EmailMessage
 from database import users, sessions, email_verifications
 
 # Existing JWT helpers
-from utils.auth import password_hash, create_token_pair, decode_token, create_token
+from utils.auth import password_hash, create_token_pair, decode_token, token_fingerprint
 from utils.responses import ErrorResponse, SuccessResponse
 
 password_hasher = PasswordHash.recommended()
@@ -124,8 +124,10 @@ router = APIRouter(
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
-    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=6, max_length=128)
+    username: str | None = None
+    name: str | None = None
+    phone: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -168,7 +170,7 @@ async def issue_tokens(user_id: str):
     await sessions.insert_one({
         "jti": jti,
         "user_id": user_id,
-        "token_hash": password_hash.hash(refresh_token),
+        "token_hash": token_fingerprint(refresh_token),
         "expires_at": datetime.fromtimestamp(
             refresh_payload["exp"],
             timezone.utc
@@ -205,7 +207,7 @@ async def revoke_session(refresh_token: str):
 
     session = await sessions.find_one({
         "jti": payload["jti"],
-        "token_hash": password_hash.hash(refresh_token),
+        "token_hash": token_fingerprint(refresh_token),
         "revoked": False
     })
 
@@ -256,14 +258,23 @@ async def send_verification_email(email: str, token: str):
         """
     )
 
-    await smtp_send(
-        message,
-        hostname=os.getenv("SMTP_HOST"),
-        port=int(os.getenv("SMTP_PORT", "587")),
-        username=os.getenv("SMTP_USERNAME"),
-        password=os.getenv("SMTP_PASSWORD"),
-        start_tls=True
-    )
+    smtp_user = os.getenv("SMTP_USERNAME")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+    if not smtp_user or not smtp_pass:
+        logging.getLogger(__name__).info("SMTP credentials not configured; skipping email delivery.")
+        return
+
+    try:
+        await smtp_send(
+            message,
+            hostname=os.getenv("SMTP_HOST", "smtp.gmail.com"),
+            port=int(os.getenv("SMTP_PORT", "587")),
+            username=smtp_user,
+            password=smtp_pass,
+            start_tls=True
+        )
+    except Exception as e:
+        logging.getLogger(__name__).warning("Failed to send verification email: %s", e)
 
 
 async def create_email_verification(email: str):
@@ -279,7 +290,7 @@ async def create_email_verification(email: str):
 
     await email_verifications.insert_one({
         "email": email,
-        "token_hash": password_hash.hash(token),
+        "token_hash": token_fingerprint(token),
         "expires_at": (
             datetime.now(timezone.utc) + VERIFICATION_EXPIRY
         ),
@@ -313,31 +324,44 @@ async def register(
         )
 
     user_id = str(uuid4())
+    username = data.username or (data.name and data.name.lower().replace(" ", "_")) or data.email.split("@")[0]
+    is_dev = os.getenv("APP_ENV", "development").lower() == "development" or not os.getenv("SMTP_USERNAME")
 
     user_document = {
         "_id": user_id,
-        "username": data.username,
+        "username": username,
+        "name": data.name or username,
+        "phone": data.phone or "",
         "email": data.email,
         "password_hash": password_hasher.hash(data.password),
-        "email_verified": False,
+        "email_verified": True if is_dev else False,
         "auth_providers": ["password"],
         "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
-        "token": create_token(user_id, token_type="encrypted", expires_delta=datetime.now() + timedelta(days=7))
+        "updated_at": datetime.now(timezone.utc)
     }
 
     await users.insert_one(user_document)
 
-    background_tasks.add_task(
-        create_email_verification,
-        data.email
-    )
+    if not is_dev:
+        background_tasks.add_task(
+            create_email_verification,
+            data.email
+        )
+
+    token_data = await issue_tokens(user_id)
+    token_data["user"] = {
+        "id": user_id,
+        "name": user_document["name"],
+        "username": user_document["username"],
+        "email": user_document["email"],
+        "phone": user_document["phone"],
+        "email_verified": user_document["email_verified"],
+        "phone_verified": False,
+        "auth_providers": ["password"]
+    }
 
     return SuccessResponse(
-        data={
-            "message": "Account created. Please verify your email.",
-            "user_id": user_id
-        }
+        data=token_data
     )
 
 
@@ -373,12 +397,27 @@ async def login(data: LoginRequest):
         )
 
     if not user.get("email_verified", False):
-        raise HTTPException(
-            status_code=403,
-            detail="Please verify your email before logging in."
-        )
+        if os.getenv("APP_ENV", "development").lower() == "development" or not os.getenv("SMTP_USERNAME"):
+            await users.update_one({"_id": user["_id"]}, {"$set": {"email_verified": True}})
+            user["email_verified"] = True
+        else:
+            raise HTTPException(
+                status_code=403,
+                detail="Please verify your email before logging in."
+            )
 
-    return SuccessResponse(data=await issue_tokens(user["_id"]))
+    token_data = await issue_tokens(user["_id"])
+    token_data["user"] = {
+        "id": user["_id"],
+        "name": user.get("name") or user.get("username", "Farmo User"),
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "phone": user.get("phone", ""),
+        "email_verified": user.get("email_verified", True),
+        "phone_verified": user.get("phone_verified", False),
+        "auth_providers": user.get("auth_providers", ["password"])
+    }
+    return SuccessResponse(data=token_data)
 
 
 # --------------------------------------------------
@@ -394,6 +433,41 @@ async def logout(data: RefreshRequest):
     await revoke_session(data.refresh_token)
 
     return SuccessResponse(data={"message": "Successfully logged out."})
+
+
+# --------------------------------------------------
+# Refresh the token pair
+# --------------------------------------------------
+
+@router.post("/refresh", response_model=SuccessResponse)
+async def refresh(data: RefreshRequest):
+    """
+    Exchange a valid, unrevoked refresh token for a fresh token pair.
+    """
+
+    try:
+        payload = decode_token(data.refresh_token)
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token.")
+
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="A refresh token is required.")
+
+    session = await sessions.find_one({
+        "jti": payload["jti"],
+        "token_hash": token_fingerprint(data.refresh_token),
+        "revoked": False
+    })
+
+    if not session:
+        raise HTTPException(status_code=401, detail="Session is invalid or already revoked.")
+
+    await sessions.update_one(
+        {"jti": payload["jti"]},
+        {"$set": {"revoked": True, "revoked_at": datetime.now(timezone.utc)}}
+    )
+
+    return SuccessResponse(data=await issue_tokens(payload["sub"]))
 
 
 def get_access_token_payload(request: Request) -> dict:
@@ -424,6 +498,20 @@ def get_access_token_payload(request: Request) -> dict:
     return payload
 
 
+def format_profile(user: dict) -> dict:
+    return {
+        "id": user["_id"],
+        "name": user.get("name") or user.get("username", "Farmo User"),
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "phone": user.get("phone", ""),
+        "jobTitle": user.get("job_title", "Farm owner"),
+        "email_verified": user.get("email_verified", False),
+        "phone_verified": user.get("phone_verified", False),
+        "auth_providers": user.get("auth_providers", [])
+    }
+
+
 @router.get("/me", response_model=SuccessResponse)
 async def get_current_user(request: Request):
     """Return the authenticated user's public profile."""
@@ -436,16 +524,39 @@ async def get_current_user(request: Request):
             detail="Account not found."
         )
 
-    return SuccessResponse(
-        data={
-            "id": user["_id"],
-            "username": user.get("username"),
-            "email": user.get("email"),
-            "email_verified": user.get("email_verified", False),
-            "phone_verified": user.get("phone_verified", False),
-            "auth_providers": user.get("auth_providers", [])
-        }
-    )
+    return SuccessResponse(data=format_profile(user))
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    phone: str | None = Field(default=None, max_length=32)
+    jobTitle: str | None = Field(default=None, max_length=80)
+
+
+@router.patch("/me", response_model=SuccessResponse)
+async def update_current_user(data: ProfileUpdateRequest, request: Request):
+    """Update the profile fields the account screen can edit."""
+    payload = get_access_token_payload(request)
+
+    updates: dict[str, Any] = {}
+    if data.name is not None:
+        updates["name"] = data.name.strip()
+    if data.phone is not None:
+        updates["phone"] = data.phone.strip()
+    if data.jobTitle is not None:
+        updates["job_title"] = data.jobTitle.strip()
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No changes provided.")
+
+    updates["updated_at"] = datetime.now(timezone.utc)
+    await users.update_one({"_id": payload["sub"]}, {"$set": updates})
+
+    user = await users.find_one({"_id": payload["sub"]})
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found.")
+
+    return SuccessResponse(data=format_profile(user))
 
 
 @router.post("/logout-all", response_model=SuccessResponse)
@@ -692,10 +803,8 @@ async def verify_email(data: VerifyEmailRequest):
     address as verified.
     """
 
-    token_hash = password_hash.hash(data.token)
-
     verification = await email_verifications.find_one({
-        "token_hash": token_hash
+        "token_hash": token_fingerprint(data.token)
     })
 
     if not verification:

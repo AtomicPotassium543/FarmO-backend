@@ -1,6 +1,12 @@
 
-from pymongo import AsyncMongoClient
 import os
+
+from dotenv import load_dotenv
+from pymongo import AsyncMongoClient
+
+# This module is imported before main.py calls load_dotenv(), so load it here
+# first or MONGO_URI is still unset when the client is created.
+load_dotenv()
 
 client = AsyncMongoClient(
     os.getenv("MONGO_URI")

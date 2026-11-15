@@ -2,7 +2,7 @@
 properties:
   soil_type:
     type: string
-    required: true
+    default: Clay loam
     enum:
       - Clay
       - Clay loam
@@ -11,12 +11,44 @@ properties:
       - Silt
       - Peaty
       - Chalky
+      - silty-clay-loam
+      - clay-loam
+      - sandy-loam
+      - silt-loam
+      - calcareous
+      - saline-clay
 
   soil_ph:
     type: number
-    required: true
+    default: 6.5
     min: 0
     max: 14
+
+  latitude:
+    type: number
+    min: -90
+    max: 90
+
+  longitude:
+    type: number
+    min: -180
+    max: 180
+
+  farmer_priority:
+    type: string
+
+  water_availability:
+    type: string
+
+  equipment_limitation:
+    type: string
+
+  market_preference:
+    type: string
+
+  human_judgment_acknowledged:
+    type: boolean
+    default: true
 
   organic_carbon:
     type: number
@@ -82,6 +114,9 @@ properties:
       - hectares
       - acres
       - square_meters
+      - acre
+      - hectare
+      - sqm
 
   locality:
     type: string

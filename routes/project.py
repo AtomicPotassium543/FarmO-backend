@@ -17,6 +17,14 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 class Project(BaseModel):
     name: str = Field(min_length=3, max_length=100)
     description: str | None = Field(default=None, max_length=2000)
+    summary: str | None = None
+    region: str | None = None
+    climate_zone: str | None = None
+    climateZone: str | None = None
+    budget_usd: float | None = None
+    budgetUsd: float | None = None
+    equipment: list[str] | None = None
+    accommodations: list[dict] | None = None
 
 
 class ProjectCollaborator(BaseModel):
@@ -33,6 +41,14 @@ def format_project(project: dict) -> dict:
         "id": str(project["_id"]),
         "name": project["name"],
         "description": project.get("description"),
+        "summary": project.get("summary") or project.get("description", ""),
+        "region": project.get("region", "Cedar Valley"),
+        "climate_zone": project.get("climate_zone") or project.get("climateZone", "NW"),
+        "climateZone": project.get("climateZone") or project.get("climate_zone", "NW"),
+        "budget_usd": project.get("budget_usd") or project.get("budgetUsd", 10000),
+        "budgetUsd": project.get("budgetUsd") or project.get("budget_usd", 10000),
+        "equipment": project.get("equipment", []),
+        "accommodations": project.get("accommodations", []),
         "owner_id": str(project["owner_id"]),
         "collaborators": [
             str(collaborator)
@@ -119,6 +135,12 @@ async def create_project(
     project = {
         "name": data.name,
         "description": data.description,
+        "summary": data.summary or data.description,
+        "region": data.region or "Cedar Valley",
+        "climate_zone": data.climate_zone or data.climateZone or "NW",
+        "budget_usd": data.budget_usd or data.budgetUsd or 10000,
+        "equipment": data.equipment or [],
+        "accommodations": data.accommodations or [],
         "owner_id": user["_id"],
         "collaborators": [],
         "farm_ids": [],
